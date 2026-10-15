@@ -1,0 +1,224 @@
+/* ============ 青阳录 · 全局样式 ============ */
+
+:root {
+  --qyl-max-width: 620px;
+  --qyl-nav-h: 60px;
+  --qyl-radius-sm: 10px;
+  --qyl-radius: 16px;
+  --qyl-radius-lg: 22px;
+  --qyl-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', 'Noto Sans SC', Roboto, 'Helvetica Neue', sans-serif;
+}
+
+html[data-theme='light'] {
+  --qyl-bg: #f4f7f5;
+  --qyl-surface: #ffffff;
+  --qyl-surface-2: #eef3f0;
+  --qyl-text: #16211e;
+  --qyl-text-2: #5a6a65;
+  --qyl-text-3: #97a5a0;
+  --qyl-line: #e6ece9;
+  --qyl-primary: #1f8a70;
+  --qyl-primary-soft: #e2f2ed;
+  --qyl-accent: #e5484d;
+  --qyl-accent-soft: #fdecec;
+  --qyl-warn: #c27b1a;
+  --qyl-warn-soft: #fbf1df;
+  --qyl-pink: #d6409f;
+  --qyl-pink-soft: #fbe9f4;
+  --qyl-shadow: 0 6px 20px rgba(22, 40, 34, 0.06);
+  --qyl-shadow-lift: 0 10px 30px rgba(22, 40, 34, 0.12);
+  --qyl-overlay: rgba(16, 26, 23, 0.42);
+}
+
+html[data-theme='dark'] {
+  --qyl-bg: #0e1412;
+  --qyl-surface: #161e1c;
+  --qyl-surface-2: #1d2725;
+  --qyl-text: #e9f0ed;
+  --qyl-text-2: #a2b0ab;
+  --qyl-text-3: #6c7a76;
+  --qyl-line: #25302d;
+  --qyl-primary: #4fc9a6;
+  --qyl-primary-soft: #15322b;
+  --qyl-accent: #ff5c62;
+  --qyl-accent-soft: #35191a;
+  --qyl-warn: #dfa457;
+  --qyl-warn-soft: #2e2415;
+  --qyl-pink: #f472c0;
+  --qyl-pink-soft: #341a2b;
+  --qyl-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  --qyl-shadow-lift: 0 10px 30px rgba(0, 0, 0, 0.5);
+  --qyl-overlay: rgba(0, 0, 0, 0.6);
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--qyl-font);
+  background: var(--qyl-bg);
+  color: var(--qyl-text);
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+  transition: background 0.25s ease, color 0.25s ease;
+}
+
+#app {
+  min-height: 100dvh;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+/* 内容容器：移动优先，桌面居中 */
+.app-shell {
+  max-width: var(--qyl-max-width);
+  margin: 0 auto;
+  padding: 0 14px calc(var(--qyl-nav-h) + 84px + env(safe-area-inset-bottom));
+}
+
+.card {
+  background: var(--qyl-surface);
+  border: 1px solid var(--qyl-line);
+  border-radius: var(--qyl-radius);
+  box-shadow: var(--qyl-shadow);
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 18px 2px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--qyl-text-2);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1.6;
+  background: var(--qyl-surface-2);
+  color: var(--qyl-text-2);
+  white-space: nowrap;
+}
+
+.chip.primary {
+  background: var(--qyl-primary-soft);
+  color: var(--qyl-primary);
+}
+
+.chip.accent {
+  background: var(--qyl-accent-soft);
+  color: var(--qyl-accent);
+}
+
+.chip.warn {
+  background: var(--qyl-warn-soft);
+  color: var(--qyl-warn);
+}
+
+.empty {
+  padding: 30px 16px;
+  text-align: center;
+  color: var(--qyl-text-3);
+  font-size: 13.5px;
+  line-height: 1.9;
+}
+
+.empty .big {
+  display: block;
+  font-size: 26px;
+  margin-bottom: 6px;
+  opacity: 0.7;
+}
+
+/* 图标按钮 */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  color: var(--qyl-text-2);
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.icon-btn:active {
+  background: var(--qyl-surface-2);
+}
+
+/* 页面切换动画 */
+.page-enter-active,
+.page-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.page-enter-from {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+.page-leave-to {
+  opacity: 0;
+}
+
+/* 弹出层动画 */
+.sheet-enter-active,
+.sheet-leave-active {
+  transition: opacity 0.22s ease;
+}
+
+.sheet-enter-active .sheet-panel,
+.sheet-leave-active .sheet-panel {
+  transition: transform 0.24s cubic-bezier(0.32, 0.72, 0.32, 1);
+}
+
+.sheet-enter-from,
+.sheet-leave-to {
+  opacity: 0;
+}
+
+.sheet-enter-from .sheet-panel,
+.sheet-leave-to .sheet-panel {
+  transform: translateY(100%);
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
