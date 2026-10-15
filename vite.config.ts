@@ -4,6 +4,8 @@ import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  // 相对路径，部署到 GitHub Pages 子目录也能正常加载
+  base: './',
   plugins: [
     vue(),
     VitePWA({
