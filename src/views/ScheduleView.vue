@@ -13,9 +13,17 @@ import { allMarks } from '@/composables/useMarks'
 import { diariesOf } from '@/composables/useDiaries'
 import { reviewsOf, reviewSummary } from '@/composables/useReviews'
 import { todosOn } from '@/composables/useTodos'
-import { eventsOf } from '@/composables/useEvents'
+import { eventsOf, eventTimeText } from '@/composables/useEvents'
 import { birthdaysOn } from '@/composables/useBirthdays'
-import { getMonthDays } from '@/utils/lunar'
+import {
+  openBirthdayEditor,
+  openDiaryEditor,
+  openEventEditor,
+  openReviewEditor,
+  openTodoEditor,
+} from '@/composables/useUi'
+import { getDayInfo, getMonthDays } from '@/utils/lunar'
+import { weekdayCN } from '@/utils/date'
 import { plainExcerpt } from '@/utils/markdown'
 import { t } from '@/composables/useI18n'
 
@@ -112,6 +120,9 @@ const slideTimer: { t: number } = { t: 0 }
 function onDown(e: PointerEvent) {
   if (locking) return
   if (e.pointerType === 'mouse' && e.button !== 0) return
+  // 手指按下时先记住并关掉小卡片；若随后点击的还是同一天，就不再弹出来（实现“再点一次关闭”）
+  closedPopKey = popKey.value
+  popKey.value = null
   dragging.value = true
   moved = false
   axis = null
@@ -179,6 +190,7 @@ function finishSlide() {
   }
   const dir: 1 | -1 = dx < 0 ? 1 : -1
   locking = true
+  popKey.value = null
   slideAnim.value = true
   slideX.value = -dir * w
   slideTimer.t = window.setTimeout(() => {
@@ -200,11 +212,97 @@ function toggleExpand() {
 function pick(key: string) {
   if (blockClick) return
   selectDate(key)
+  closeDayPop()
 }
 
 function pickInYear(key: string) {
   selectDate(key)
   setView('month')
+}
+
+/* -------------------- 点击日期弹出的悬浮小卡片 -------------------- */
+
+interface PopItem {
+  id: string
+  kind: 'diary' | 'todo' | 'review' | 'event' | 'birthday'
+  color: string
+  title: string
+  meta?: string
+}
+
+const POP_W = 230
+const popKey = ref<string | null>(null)
+const popPos = ref({ top: 0, left: 0 })
+/** 本次 pointerdown 刚被关掉的小卡片日期（用来识别“再点同一天 = 关闭”） */
+let closedPopKey: string | null = null
+
+/** 月历里点日期：选中 + 在那格附近弹出当天内容小卡片；再点同一天关闭 */
+function pickWithPop(key: string, ev?: MouseEvent) {
+  if (blockClick) return
+  selectDate(key)
+  if (closedPopKey === key) {
+    // 按下时已经把卡片关了，这次点击只是“收起”，不再弹出
+    closedPopKey = null
+    return
+  }
+  closedPopKey = null
+  popKey.value = key
+  if (ev?.currentTarget) {
+    const r = (ev.currentTarget as HTMLElement).getBoundingClientRect()
+    let left = r.left + r.width / 2 - POP_W / 2
+    left = Math.max(8, Math.min(left, window.innerWidth - POP_W - 8))
+    let top = r.bottom + 6
+    // 下方放不下就翻到格子上面
+    if (top + 250 > window.innerHeight) top = Math.max(8, r.top - 256)
+    popPos.value = { top, left }
+  } else {
+    popPos.value = { top: Math.max(8, window.innerHeight / 2 - 120), left: (window.innerWidth - POP_W) / 2 }
+  }
+}
+
+function closeDayPop() {
+  popKey.value = null
+}
+
+const popHead = computed(() => {
+  const k = popKey.value
+  if (!k) return { main: '', sub: '' }
+  const [, m, d] = k.split('-').map(Number)
+  return { main: `${m}月${d}日 ${weekdayCN(k)}`, sub: `农历${getDayInfo(k).lunarMonthDay}` }
+})
+
+/** 小卡片里的条目：日记 → 待办 → 复盘 → 日程 → 生日 */
+const popItems = computed<PopItem[]>(() => {
+  const k = popKey.value
+  if (!k) return []
+  const out: PopItem[] = []
+  for (const d of diariesOf(k)) {
+    out.push({ id: d.id, kind: 'diary', color: 'var(--qyl-primary)', title: d.title || plainExcerpt(d.content, 18) || t('mod.diary') })
+  }
+  for (const td of todosOn(k)) {
+    out.push({ id: td.id, kind: 'todo', color: 'var(--qyl-warn)', title: td.title || t('mod.todo') })
+  }
+  for (const r of reviewsOf(k)) {
+    out.push({ id: r.id, kind: 'review', color: 'var(--qyl-review)', title: reviewSummary(r) || t('mod.review'), meta: t('review.range', { n: r.days }) })
+  }
+  for (const ev of eventsOf(k)) {
+    out.push({ id: ev.id, kind: 'event', color: 'var(--qyl-accent)', title: ev.title || t('mod.event'), meta: eventTimeText(ev) })
+  }
+  for (const bd of birthdaysOn(k)) {
+    out.push({ id: bd.b.id, kind: 'birthday', color: 'var(--qyl-pink)', title: bd.b.name, meta: bd.age != null ? t('info.turnsAge', { n: bd.age }) : undefined })
+  }
+  return out
+})
+
+/** 点小卡片里的条目：跳到对应的详情 / 编辑页 */
+function openPopItem(it: PopItem) {
+  const k = popKey.value ?? undefined
+  popKey.value = null
+  if (it.kind === 'diary') openDiaryEditor({ id: it.id, date: k! })
+  else if (it.kind === 'todo') openTodoEditor({ id: it.id })
+  else if (it.kind === 'review') openReviewEditor({ id: it.id, date: k! })
+  else if (it.kind === 'event') openEventEditor({ id: it.id, date: k! })
+  else openBirthdayEditor({ id: it.id })
 }
 </script>
 
@@ -232,7 +330,7 @@ function pickInYear(key: string) {
                 :expand="expand"
                 :annotations="annotationsPrev"
                 :dragging="dragging"
-                @select="pick"
+                @select="pickWithPop"
               />
             </div>
             <div class="month-slot">
@@ -244,7 +342,7 @@ function pickInYear(key: string) {
                 :expand="expand"
                 :annotations="annotationsNow"
                 :dragging="dragging"
-                @select="pick"
+                @select="pickWithPop"
               />
             </div>
             <div class="month-slot">
@@ -256,7 +354,7 @@ function pickInYear(key: string) {
                 :expand="expand"
                 :annotations="annotationsNext"
                 :dragging="dragging"
-                @select="pick"
+                @select="pickWithPop"
               />
             </div>
           </div>
@@ -306,6 +404,27 @@ function pickInYear(key: string) {
 
     <Transition name="fade">
       <DateInfoPanel v-if="calendar.view === 'month' && expand > 0.05" :selected="calendar.selected" />
+    </Transition>
+
+    <!-- 点击日期弹出的悬浮小卡片：头部日期 + 当天内容条目，点条目跳详情；再点同一天或拖动日历关闭 -->
+    <Transition name="pop">
+      <div
+        v-if="popKey"
+        class="day-pop"
+        :style="{ top: popPos.top + 'px', left: popPos.left + 'px', width: POP_W + 'px' }"
+      >
+        <div class="dp-head">
+          <b>{{ popHead.main }}</b>
+          <small>{{ popHead.sub }}</small>
+        </div>
+        <div v-if="popItems.length" class="dp-list">
+          <button v-for="it in popItems" :key="it.kind + it.id" class="dp-item" @click="openPopItem(it)">
+            <i class="dp-bar" :style="{ background: it.color }"></i>
+            <span class="dp-title">{{ it.title }}</span>
+            <span v-if="it.meta" class="dp-meta">{{ it.meta }}</span>
+          </button>
+        </div>
+      </div>
     </Transition>
   </div>
 </template>
@@ -368,5 +487,85 @@ function pickInYear(key: string) {
 
 .grab.open .grab-chev {
   transform: rotate(180deg);
+}
+
+/* 点击日期弹出的悬浮小卡片 */
+.day-pop {
+  position: fixed;
+  z-index: 59;
+  padding: 12px 12px 10px;
+  border-radius: 16px;
+  background: var(--qyl-surface);
+  border: 1px solid var(--qyl-line);
+  box-shadow: var(--qyl-shadow-lift);
+}
+
+.dp-head b {
+  font-size: 15px;
+}
+
+.dp-head small {
+  display: block;
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--qyl-text-3);
+}
+
+.dp-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 190px;
+  overflow-y: auto;
+}
+
+.dp-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 9px;
+  border-radius: 10px;
+  background: var(--qyl-surface-2);
+  text-align: left;
+}
+
+.dp-item:active {
+  opacity: 0.75;
+}
+
+.dp-bar {
+  flex: none;
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+}
+
+.dp-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dp-meta {
+  flex: none;
+  font-size: 11px;
+  color: var(--qyl-text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.pop-enter-active,
+.pop-leave-active {
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.pop-enter-from,
+.pop-leave-to {
+  opacity: 0;
+  transform: translateY(-4px) scale(0.98);
 }
 </style>

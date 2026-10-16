@@ -26,7 +26,11 @@ const props = defineProps<{
   dragging?: boolean
 }>()
 
-const emit = defineEmits<{ (e: 'select', key: string): void }>()
+const emit = defineEmits<{ (e: 'select', key: string, ev?: MouseEvent): void }>()
+
+function onCellTap(key: string, ev: MouseEvent) {
+  emit('select', key, ev)
+}
 
 const today = todayKey()
 const WEEK = computed(() => weekHeadLabels())
@@ -75,7 +79,7 @@ function dots(key: string): string[] {
           'has-line': idx >= 7,
         }"
         :style="{ minHeight: cellH + 'px' }"
-        @click="emit('select', c.info.key)"
+        @click="onCellTap(c.info.key, $event)"
       >
         <span v-if="c.info.isRest" class="badge rest">{{ t('cal.rest') }}</span>
         <span v-else-if="c.info.isWork" class="badge work">{{ t('cal.work') }}</span>
@@ -87,10 +91,12 @@ function dots(key: string): string[] {
           class="anno"
           :style="{ opacity: annoOpacity, maxHeight: grow + 'px' }"
         >
-          <span v-for="(a, i) in anno(c.info.key)" :key="i" class="anno-line">
-            <i class="anno-dot" :style="{ background: a.color }"></i>
-            <span class="anno-text">{{ a.text }}</span>
-          </span>
+          <span
+            v-for="(a, i) in anno(c.info.key)"
+            :key="i"
+            class="anno-line"
+            :style="{ color: a.color, background: 'color-mix(in srgb, ' + a.color + ' 16%, transparent)' }"
+          >{{ a.text }}</span>
         </span>
         <span v-else class="dots">
           <i v-for="(color, i) in dots(c.info.key)" :key="i" :style="{ background: color }"></i>
@@ -204,38 +210,26 @@ function dots(key: string): string[] {
   color: var(--qyl-accent);
 }
 
-/* 展开后出现在日期格子下方的当天标注：每条一行，句首带类型色点 */
+/* 展开后出现在日期格子下方的当天标注：小药丸样式，每条一行 */
 .anno {
   width: 100%;
-  padding: 0 3px;
+  padding: 0 2px;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  align-items: center;
+  gap: 1.5px;
   overflow: hidden;
   transition: opacity 0.18s ease;
 }
 
 .anno-line {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  min-width: 0;
-  font-size: 10.5px;
+  display: block;
+  max-width: 100%;
+  width: fit-content;
+  padding: 0 3px;
+  border-radius: 4px;
+  font-size: 8.5px;
   line-height: 1.4;
-  color: var(--qyl-text-2);
-  text-align: left;
-}
-
-.anno-dot {
-  flex: none;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-}
-
-.anno-text {
-  flex: 1;
-  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
