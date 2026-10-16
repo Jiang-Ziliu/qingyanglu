@@ -6,27 +6,32 @@ import {
   deleteBirthday,
   deleteDiaryCompletely,
   deleteEvent,
+  deleteReview,
   deleteTodo,
   estimateUsage,
   getAllBirthdays,
   getAllDiaries,
   getAllEvents,
+  getAllReviews,
   getAllTodos,
   purgeExpiredTrash,
   putBirthday,
   putDiary,
   putEvent,
+  putReview,
   putTodo,
   wipeAllData,
   type Birthday,
   type CalendarEvent,
   type Diary,
+  type Review,
   type Todo,
   type TrashItem,
 } from '@/utils/db'
 import { loadBirthdays } from '@/composables/useBirthdays'
 import { loadDiaries } from '@/composables/useDiaries'
 import { loadEvents } from '@/composables/useEvents'
+import { loadReviews } from '@/composables/useReviews'
 import { loadTodos } from '@/composables/useTodos'
 import { showToast } from '@/composables/useUi'
 import { t } from '@/composables/useI18n'
@@ -56,20 +61,22 @@ async function exportBackup() {
   if (exporting.value) return
   exporting.value = true
   try {
-    const [diaries, events, todos, birthdays] = await Promise.all([
+    const [diaries, events, todos, birthdays, reviews] = await Promise.all([
       getAllDiaries(),
       getAllEvents(),
       getAllTodos(),
       getAllBirthdays(),
+      getAllReviews(),
     ])
     const payload = {
       app: 'qingyanglu',
-      schema: 3,
+      schema: 4,
       exportedAt: new Date().toISOString(),
       diaries,
       events,
       todos,
       birthdays,
+      reviews,
     }
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
@@ -81,7 +88,15 @@ async function exportBackup() {
     a.click()
     a.remove()
     URL.revokeObjectURL(url)
-    showToast(t('toast.exportDone', { d: diaries.length, e: events.length, t: todos.length, b: birthdays.length }))
+    showToast(
+      t('toast.exportDone', {
+        d: diaries.length,
+        e: events.length,
+        t: todos.length,
+        b: birthdays.length,
+        r: reviews.length,
+      }),
+    )
   } catch (err) {
     console.error('[青阳录] 导出备份失败', err)
     showToast(t('err.export'))
@@ -123,13 +138,21 @@ async function onImportFile(ev: Event) {
   const events = d.events as CalendarEvent[]
   const todos = d.todos as Todo[]
   const birthdays = d.birthdays as Birthday[]
-  const total = diaries.length + events.length + todos.length + birthdays.length
+  // 旧备份没有复盘字段，按空数组处理
+  const reviews = Array.isArray(d.reviews) ? (d.reviews as Review[]) : []
+  const total = diaries.length + events.length + todos.length + birthdays.length + reviews.length
   if (total === 0) {
     showToast(t('data.emptyBackup'))
     return
   }
 
-  const msg = t('data.importConfirm', { d: diaries.length, e: events.length, t: todos.length, b: birthdays.length })
+  const msg = t('data.importConfirm', {
+    d: diaries.length,
+    e: events.length,
+    t: todos.length,
+    b: birthdays.length,
+    r: reviews.length,
+  })
   if (!window.confirm(msg)) return
 
   importing.value = true
@@ -138,6 +161,7 @@ async function onImportFile(ev: Event) {
     for (const x of events) await putEvent(x)
     for (const x of todos) await putTodo(x)
     for (const x of birthdays) await putBirthday(x)
+    for (const x of reviews) await putReview(x)
     await reloadAll()
     await refresh()
     showToast(t('toast.importDone', { n: total }))
@@ -156,6 +180,7 @@ const KIND_ICONS: Record<TrashItem['kind'], string> = {
   event: '🗓',
   todo: '✓',
   birthday: '🎂',
+  review: '🧭',
 }
 
 function kindLabel(kind: TrashItem['kind']): string {
@@ -191,6 +216,10 @@ function subText(item: TrashItem): string {
     return `${formatCN(d.date)} · ${tail}`
   }
   if (item.kind === 'event') return formatCN((item.raw as CalendarEvent).date)
+  if (item.kind === 'review') {
+    const r = item.raw as Review
+    return `${formatCN(r.date)} · ${t('review.range', { n: r.days })}`
+  }
   if (item.kind === 'todo') {
     const td = item.raw as Todo
     return td.due ? formatCN(td.due) : t('todo.notScheduled')
@@ -207,8 +236,9 @@ async function restoreItem(item: TrashItem) {
     if (item.kind === 'diary') await putDiary(restored as Diary)
     else if (item.kind === 'event') await putEvent(restored as CalendarEvent)
     else if (item.kind === 'todo') await putTodo(restored as Todo)
+    else if (item.kind === 'review') await putReview(restored as Review)
     else await putBirthday(restored as Birthday)
-    await Promise.all([loadDiaries(), loadEvents(), loadTodos(), loadBirthdays()])
+    await Promise.all([loadDiaries(), loadEvents(), loadTodos(), loadBirthdays(), loadReviews()])
     await refresh()
     showToast(t('toast.trashRestored', { kind: kindLabel(item.kind), title: displayTitle(item) }))
   } catch (err) {
@@ -227,6 +257,7 @@ async function destroyItem(item: TrashItem) {
     if (item.kind === 'diary') await deleteDiaryCompletely(item.raw as Diary)
     else if (item.kind === 'event') await deleteEvent(item.id)
     else if (item.kind === 'todo') await deleteTodo(item.id)
+    else if (item.kind === 'review') await deleteReview(item.id)
     else await deleteBirthday(item.id)
     await refresh()
     showToast(t('toast.destroyed'))
@@ -247,6 +278,7 @@ async function emptyTrash() {
       if (item.kind === 'diary') await deleteDiaryCompletely(item.raw as Diary)
       else if (item.kind === 'event') await deleteEvent(item.id)
       else if (item.kind === 'todo') await deleteTodo(item.id)
+      else if (item.kind === 'review') await deleteReview(item.id)
       else await deleteBirthday(item.id)
     }
     await refresh()
@@ -278,7 +310,7 @@ async function wipeEverything() {
 /* ------------------------------ 刷新 ------------------------------ */
 
 async function reloadAll() {
-  await Promise.all([loadDiaries(), loadEvents(), loadTodos(), loadBirthdays()])
+  await Promise.all([loadDiaries(), loadEvents(), loadTodos(), loadBirthdays(), loadReviews()])
 }
 
 async function refresh() {

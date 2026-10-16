@@ -5,6 +5,12 @@ import { todayKey, weekHeadLabels } from '@/utils/date'
 import { settings } from '@/composables/useSettings'
 import { t } from '@/composables/useI18n'
 
+/** 一条当天标注：句首圆点颜色 + 单行文本 */
+export interface AnnoItem {
+  color: string
+  text: string
+}
+
 const props = defineProps<{
   year: number
   /** 1 - 12*/
@@ -12,12 +18,29 @@ const props = defineProps<{
   selected: string
   /** 日期 -> 圆点颜色列表（事件/生日标记） */
   marks?: Record<string, string[]>
+  /** 0 = 收起；1 = 完全展开（行距拉大、露出当天标注） */
+  expand?: number
+  /** 日期 -> 当天标注列表（没内容的日期不出现），每条一行 */
+  annotations?: Record<string, AnnoItem[]>
+  /** 手指拖动中：关掉过渡，保证跟手 */
+  dragging?: boolean
 }>()
 
 const emit = defineEmits<{ (e: 'select', key: string): void }>()
 
 const today = todayKey()
 const WEEK = computed(() => weekHeadLabels())
+
+/** 展开到 1 时每行多出 32px，用来放当天的标注 */
+const grow = computed(() => Math.round((props.expand ?? 0) * 32))
+const cellH = computed(() => 60 + grow.value)
+const showAnno = computed(() => (props.expand ?? 0) > 0.05)
+const annoOpacity = computed(() => Math.min(1, Math.max(0, ((props.expand ?? 0) - 0.05) / 0.45)))
+
+/** 每天最多露 2 行标注，每行一句话 */
+function anno(key: string): AnnoItem[] {
+  return (props.annotations?.[key] ?? []).slice(0, 2)
+}
 
 const cells = computed(() =>
   getMonthDays(props.year, props.month)
@@ -34,21 +57,24 @@ function dots(key: string): string[] {
 </script>
 
 <template>
-  <div class="month-wrap">
+  <div class="month-wrap" :class="{ dragging, expanded: showAnno }">
     <div class="week-head">
       <span v-for="(w, i) in WEEK" :key="i" :class="{ weekend: i === 0 || i === 6 }">{{ w }}</span>
     </div>
 
     <div class="grid">
       <button
-        v-for="c in cells"
+        v-for="(c, idx) in cells"
         :key="c.info.key"
         class="cell"
         :class="{
           other: c.info.month !== month,
           today: c.info.key === today,
           selected: c.info.key === selected,
+          grown: grow > 0,
+          'has-line': idx >= 7,
         }"
+        :style="{ minHeight: cellH + 'px' }"
         @click="emit('select', c.info.key)"
       >
         <span v-if="c.info.isRest" class="badge rest">{{ t('cal.rest') }}</span>
@@ -56,7 +82,17 @@ function dots(key: string): string[] {
 
         <span class="num">{{ c.info.day }}</span>
         <span class="sub" :class="c.label.type">{{ c.text }}</span>
-        <span class="dots">
+        <span
+          v-if="showAnno && anno(c.info.key).length"
+          class="anno"
+          :style="{ opacity: annoOpacity, maxHeight: grow + 'px' }"
+        >
+          <span v-for="(a, i) in anno(c.info.key)" :key="i" class="anno-line">
+            <i class="anno-dot" :style="{ background: a.color }"></i>
+            <span class="anno-text">{{ a.text }}</span>
+          </span>
+        </span>
+        <span v-else class="dots">
           <i v-for="(color, i) in dots(c.info.key)" :key="i" :style="{ background: color }"></i>
         </span>
       </button>
@@ -99,7 +135,12 @@ function dots(key: string): string[] {
   align-items: center;
   gap: 1px;
   border-radius: 13px;
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, min-height 0.18s ease;
+}
+
+/* 手指拖动时关掉过渡，保证格子跟着手指走 */
+.month-wrap.dragging .cell {
+  transition: none;
 }
 
 .cell:active {
@@ -161,6 +202,69 @@ function dots(key: string): string[] {
 
 .cell.selected .sub {
   color: var(--qyl-accent);
+}
+
+/* 展开后出现在日期格子下方的当天标注：每条一行，句首带类型色点 */
+.anno {
+  width: 100%;
+  padding: 0 3px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow: hidden;
+  transition: opacity 0.18s ease;
+}
+
+.anno-line {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--qyl-text-2);
+  text-align: left;
+}
+
+.anno-dot {
+  flex: none;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+}
+
+.anno-text {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.month-wrap.dragging .anno {
+  transition: none;
+}
+
+/* 展开后每一周排之间的细分隔线 */
+.cell.has-line::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 3px;
+  right: 3px;
+  height: 1px;
+  background: var(--qyl-line);
+  opacity: 0;
+  transition: opacity 0.18s ease;
+  pointer-events: none;
+}
+
+.month-wrap.expanded .cell.has-line::before {
+  opacity: 0.55;
+}
+
+.month-wrap.dragging .cell.has-line::before {
+  transition: none;
 }
 
 .dots {

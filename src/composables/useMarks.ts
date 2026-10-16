@@ -3,10 +3,11 @@ import { diaryMarks } from './useDiaries'
 import { eventMarks } from './useEvents'
 import { todoMarks } from './useTodos'
 import { birthdayMarks } from './useBirthdays'
+import { reviewMarks } from './useReviews'
 
 /**
  * 日历上的合并圆点标记。
- * 日记 = 主色，日程 = 强调色，待办 = 橙黄色，生日 = 粉色；同一天最多显示 3 个（由格子自己截断）。
+ * 日记 = 主色，日程 = 强调色，待办 = 橙黄色，生日 = 粉色，复盘 = 靛蓝色；同一天最多显示 3 个（由格子自己截断）。
  */
 export const allMarks = computed(() => {
   const out: Record<string, string[]> = {}
@@ -22,5 +23,6 @@ export const allMarks = computed(() => {
   merge(eventMarks.value)
   merge(todoMarks.value)
   merge(birthdayMarks.value)
+  merge(reviewMarks.value)
   return out
 })

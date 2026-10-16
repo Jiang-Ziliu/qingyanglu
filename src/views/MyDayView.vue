@@ -2,19 +2,24 @@
 import { computed } from 'vue'
 import TopBar from '@/components/TopBar.vue'
 import { getDayInfo, getVisibleFestivals } from '@/utils/lunar'
-import { addDays, formatCN, todayKey, weekdayCN, diffDays } from '@/utils/date'
+import { formatCN, todayKey, weekdayCN, diffDays } from '@/utils/date'
 import { settings } from '@/composables/useSettings'
 import { diariesOf } from '@/composables/useDiaries'
-import { copyEventsTo, eventTimeText, eventsOf } from '@/composables/useEvents'
+import { eventsOf } from '@/composables/useEvents'
 import { todayTodos, toggleTodo } from '@/composables/useTodos'
 import { upcomingBirthdays } from '@/composables/useBirthdays'
-import { openBirthdayEditor, openDiaryEditor, openEventEditor, openTodoEditor, showToast } from '@/composables/useUi'
+import { reviewsOf, reviewSummary } from '@/composables/useReviews'
+import {
+  openBirthdayEditor,
+  openDiaryEditor,
+  openReviewEditor,
+  openTodoEditor,
+} from '@/composables/useUi'
 import { plainExcerpt } from '@/utils/markdown'
 import { t, locale, tf } from '@/composables/useI18n'
 import type { Diary } from '@/utils/db'
 
 const today = todayKey()
-const yesterday = addDays(today, -1)
 
 const info = computed(() => getDayInfo(today))
 const festivals = computed(() => getVisibleFestivals(info.value, settings.festivalFilter))
@@ -23,23 +28,12 @@ const heroSub = computed(() =>
     ? `${info.value.ganzhiYear}年 ${info.value.lunarMonthDay} · 属${info.value.zodiac}`
     : `${info.value.lunarMonthDay} · Year of the ${tf(info.value.zodiac)}`,
 )
-const openTodoCount = computed(() => todos.value.filter((x) => !x.done).length)
-const eventCount = computed(() => allDayEvents.value.length + timedEvents.value.length)
-
-const allDayEvents = computed(() => eventsOf(today).filter((e) => e.allDay || !e.startTime))
-const timedEvents = computed(() => eventsOf(today).filter((e) => !e.allDay && e.startTime))
 const todos = todayTodos
+const openTodoCount = computed(() => todos.value.filter((x) => !x.done).length)
+const eventCount = computed(() => eventsOf(today).length)
 const diaries = computed(() => diariesOf(today))
-const yesterdayCount = computed(() => eventsOf(yesterday).length)
+const reviews = computed(() => reviewsOf(today))
 const birthdays = computed(() => upcomingBirthdays(60, 5))
-
-function addEvent() {
-  openEventEditor({ date: today })
-}
-
-function editEvent(id: string) {
-  openEventEditor({ id, date: today })
-}
 
 function addTodo() {
   openTodoEditor({ due: today })
@@ -57,17 +51,16 @@ function editDiary(id: string) {
   openDiaryEditor({ id, date: today })
 }
 
-function editBirthday(id: string) {
-  openBirthdayEditor({ id })
+function writeReview() {
+  openReviewEditor({ date: today })
 }
 
-async function copyYesterday() {
-  if (yesterdayCount.value === 0) {
-    showToast(t('toast.copyNone'))
-    return
-  }
-  const n = await copyEventsTo(yesterday, today)
-  showToast(t('toast.copyDone', { n }))
+function editReview(id: string) {
+  openReviewEditor({ id, date: today })
+}
+
+function editBirthday(id: string) {
+  openBirthdayEditor({ id })
 }
 
 function diarySummary(d: Diary): string {
@@ -76,6 +69,10 @@ function diarySummary(d: Diary): string {
   if (d.attachments.length) return t('info.attachN', { n: d.attachments.length })
   if (d.mood) return t('info.moodOnly')
   return t('info.noBody')
+}
+
+function reviewRange(days: number): string {
+  return t('review.range', { n: days })
 }
 
 function overDays(due: string): number {
@@ -103,40 +100,29 @@ function overDays(due: string): number {
     </div>
 
     <p class="section-title">
-      <span>{{ t('myday.todayTasks') }}</span>
-      <span>{{ t('common.items', { n: eventCount }) }}</span>
+      <span>{{ t('myday.todayDiary') }}</span>
+      <span>{{ t('myday.diaryCount', { n: diaries.length }) }}</span>
     </p>
 
     <div class="card block">
-      <div v-if="eventCount === 0" class="empty">
-        <span class="big">🗓</span>
-        {{ t('myday.emptyEvents1') }}<br />
-        {{ t('myday.emptyEvents2') }}
+      <div v-if="diaries.length === 0" class="empty">
+        <span class="big">✎</span>
+        {{ t('myday.emptyDiary1') }}<br />
+        {{ t('myday.emptyDiary2') }}
       </div>
 
-      <button v-for="e in allDayEvents" :key="e.id" class="row" @click="editEvent(e.id)">
-        <span class="time allday">{{ t('common.allDay') }}</span>
+      <button v-for="d in diaries" :key="d.id" class="row" @click="editDiary(d.id)">
+        <span class="mood">{{ d.mood || '📝' }}</span>
         <span class="row-txt">
-          <b>{{ e.title }}</b>
-          <small v-if="e.note">{{ e.note }}</small>
+          <b>{{ d.title || t('common.noTitle') }}</b>
+          <small>{{ diarySummary(d) }}</small>
         </span>
-        <span class="arrow">›</span>
-      </button>
-
-      <button v-for="e in timedEvents" :key="e.id" class="row" @click="editEvent(e.id)">
-        <span class="time">{{ eventTimeText(e) }}</span>
-        <span class="row-txt">
-          <b>{{ e.title }}</b>
-          <small v-if="e.note">{{ e.note }}</small>
-        </span>
+        <span v-if="d.favorite" class="fav">★</span>
         <span class="arrow">›</span>
       </button>
 
       <div class="btn-row">
-        <button class="ghost" @click="addEvent">{{ t('myday.newEvent') }}</button>
-        <button class="ghost" :class="{ muted: yesterdayCount === 0 }" @click="copyYesterday">
-          {{ t('myday.copyYesterday') }}<template v-if="yesterdayCount">（{{ yesterdayCount }}）</template>
-        </button>
+        <button class="ghost" @click="writeDiary">{{ t('myday.writeDiary') }}</button>
       </div>
     </div>
 
@@ -179,29 +165,28 @@ function overDays(due: string): number {
     </div>
 
     <p class="section-title">
-      <span>{{ t('myday.todayDiary') }}</span>
-      <span>{{ t('myday.diaryCount', { n: diaries.length }) }}</span>
+      <span>{{ t('myday.reviewTitle') }}</span>
+      <span>{{ t('myday.reviewCount', { n: reviews.length }) }}</span>
     </p>
 
     <div class="card block">
-      <div v-if="diaries.length === 0" class="empty">
-        <span class="big">✎</span>
-        {{ t('myday.emptyDiary1') }}<br />
-        {{ t('myday.emptyDiary2') }}
+      <div v-if="reviews.length === 0" class="empty">
+        <span class="big">🧭</span>
+        {{ t('myday.emptyReview1') }}<br />
+        {{ t('myday.emptyReview2') }}
       </div>
 
-      <button v-for="d in diaries" :key="d.id" class="row" @click="editDiary(d.id)">
-        <span class="mood">{{ d.mood || '📝' }}</span>
+      <button v-for="r in reviews" :key="r.id" class="row" @click="editReview(r.id)">
+        <span class="mood review-lead">🧭</span>
         <span class="row-txt">
-          <b>{{ d.title || t('common.noTitle') }}</b>
-          <small>{{ diarySummary(d) }}</small>
+          <b>{{ reviewSummary(r) || t('mod.review') }}</b>
+          <small>{{ reviewRange(r.days) }}</small>
         </span>
-        <span v-if="d.favorite" class="fav">★</span>
         <span class="arrow">›</span>
       </button>
 
       <div class="btn-row">
-        <button class="ghost" @click="writeDiary">{{ t('myday.writeDiary') }}</button>
+        <button class="ghost review" @click="writeReview">{{ t('myday.newReview') }}</button>
       </div>
     </div>
 
@@ -275,19 +260,6 @@ function overDays(due: string): number {
   background: var(--qyl-surface-2);
 }
 
-.time {
-  flex: none;
-  min-width: 56px;
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--qyl-accent);
-  font-variant-numeric: tabular-nums;
-}
-
-.time.allday {
-  color: var(--qyl-primary);
-}
-
 .row-txt {
   flex: 1;
   min-width: 0;
@@ -351,6 +323,11 @@ function overDays(due: string): number {
   justify-content: center;
 }
 
+.mood.review-lead {
+  background: var(--qyl-review-soft);
+  font-size: 16px;
+}
+
 .fav {
   flex: none;
   color: var(--qyl-warn);
@@ -398,9 +375,9 @@ function overDays(due: string): number {
   font-weight: 600;
 }
 
-.ghost.muted {
-  background: var(--qyl-surface-2);
-  color: var(--qyl-text-3);
+.ghost.review {
+  background: var(--qyl-review-soft);
+  color: var(--qyl-review);
 }
 
 .ghost:active {

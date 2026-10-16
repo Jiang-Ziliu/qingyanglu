@@ -9,11 +9,13 @@ import DiaryEditor from '@/components/DiaryEditor.vue'
 import EventEditor from '@/components/EventEditor.vue'
 import TodoEditor from '@/components/TodoEditor.vue'
 import BirthdayEditor from '@/components/BirthdayEditor.vue'
+import ReviewEditor from '@/components/ReviewEditor.vue'
 import SearchSheet from '@/components/SearchSheet.vue'
 import { loadDiaries } from '@/composables/useDiaries'
 import { loadEvents } from '@/composables/useEvents'
 import { loadTodos } from '@/composables/useTodos'
 import { loadBirthdays } from '@/composables/useBirthdays'
+import { loadReviews } from '@/composables/useReviews'
 import { ui } from '@/composables/useUi'
 import { useShortcuts } from '@/composables/useShortcuts'
 
@@ -24,6 +26,7 @@ onMounted(() => {
   void loadEvents()
   void loadTodos()
   void loadBirthdays()
+  void loadReviews()
 })
 </script>
 
@@ -43,6 +46,7 @@ onMounted(() => {
     <EventEditor />
     <TodoEditor />
     <BirthdayEditor />
+    <ReviewEditor />
     <SearchSheet />
 
     <Transition name="fade">

@@ -11,6 +11,7 @@ import {
   closeEventEditor,
   closeTodoEditor,
   closeBirthdayEditor,
+  closeReviewEditor,
 } from './useUi'
 import { backToToday } from './useCalendar'
 
@@ -28,6 +29,7 @@ function anyPopupOpen(): boolean {
     ui.eventEditorOpen ||
     ui.todoEditorOpen ||
     ui.birthdayEditorOpen ||
+    ui.reviewEditorOpen ||
     ui.searchOpen ||
     ui.createSheetOpen ||
     ui.settingsSheetOpen
@@ -50,6 +52,10 @@ function closeTopPopup(): boolean {
   }
   if (ui.birthdayEditorOpen) {
     closeBirthdayEditor()
+    return true
+  }
+  if (ui.reviewEditorOpen) {
+    closeReviewEditor()
     return true
   }
   if (ui.searchOpen) {

@@ -22,6 +22,11 @@ export const ui = reactive({
   /** 生日编辑器（新建 / 修改生日提醒） */
   birthdayEditorOpen: false,
   birthdayEditingId: '',
+  /** 复盘编辑器（新建 / 修改复盘） */
+  reviewEditorOpen: false,
+  reviewEditingId: '',
+  /** 新建复盘时落在哪一天 */
+  reviewEditingDate: '',
   /** 全局搜索面板 */
   searchOpen: false,
   toast: '',
@@ -94,6 +99,17 @@ export function openBirthdayEditor(options: { id?: string } = {}) {
 
 export function closeBirthdayEditor() {
   ui.birthdayEditorOpen = false
+}
+
+/** 打开复盘编辑器；传 id 表示改已有复盘，否则在 date 这天新建 */
+export function openReviewEditor(options: { id?: string; date: string }) {
+  ui.reviewEditingId = options.id ?? ''
+  ui.reviewEditingDate = options.date
+  ui.reviewEditorOpen = true
+}
+
+export function closeReviewEditor() {
+  ui.reviewEditorOpen = false
 }
 
 export function openSearch() {

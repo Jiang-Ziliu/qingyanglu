@@ -1,54 +1,43 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { getDayInfo, getVisibleFestivals } from '@/utils/lunar'
-import { diffDays, formatFull, todayKey } from '@/utils/date'
-import { settings } from '@/composables/useSettings'
 import { diariesOf } from '@/composables/useDiaries'
 import { eventsOf, eventTimeText } from '@/composables/useEvents'
 import { birthdaysOn } from '@/composables/useBirthdays'
-import { openBirthdayEditor, openDiaryEditor, openEventEditor } from '@/composables/useUi'
+import { todosOn, toggleTodo } from '@/composables/useTodos'
+import { reviewsOf, reviewSummary } from '@/composables/useReviews'
+import {
+  openBirthdayEditor,
+  openDiaryEditor,
+  openEventEditor,
+  openReviewEditor,
+  openTodoEditor,
+} from '@/composables/useUi'
 import { plainExcerpt } from '@/utils/markdown'
-import { locale, t, tf } from '@/composables/useI18n'
+import { t } from '@/composables/useI18n'
+import type { Diary } from '@/utils/db'
 
 const props = defineProps<{
   selected: string
-  marks?: Record<string, string[]>
 }>()
 
-const today = todayKey()
-const info = computed(() => getDayInfo(props.selected))
-/** 完整节日名（不截断），由「显示设置」决定显示国内 / 国外 */
-const festivals = computed(() => getVisibleFestivals(info.value, settings.festivalFilter).map(tf))
-const isStatutory = computed(() => settings.festivalFilter === 'statutory')
-
 const dayDiaries = computed(() => diariesOf(props.selected))
+const dayReviews = computed(() => reviewsOf(props.selected))
+const dayTodos = computed(() => todosOn(props.selected))
 const dayEvents = computed(() => eventsOf(props.selected))
 const dayBirthdays = computed(() => birthdaysOn(props.selected))
 
-const relText = computed(() => {
-  const n = diffDays(today, props.selected)
-  if (n === 0) return t('info.relToday')
-  if (n > 0) return t('info.relFuture', { n })
-  return t('info.relPast', { n: -n })
-})
-
-const hasAnyChip = computed(
+/** 这一天有用内容才显示；什么都没写就整块不出现 */
+const hasAny = computed(
   () =>
-    !!info.value.jieQi ||
-    shownFestivals.value.length > 0 ||
-    info.value.isRest ||
-    info.value.isWork,
+    dayDiaries.value.length +
+      dayReviews.value.length +
+      dayTodos.value.length +
+      dayEvents.value.length +
+      dayBirthdays.value.length >
+    0,
 )
 
-/** 「仅法定节假日」模式下只显示放假名称，其余模式显示选定的节日 */
-const shownFestivals = computed(() => {
-  if (isStatutory.value && (info.value.isRest || info.value.isWork)) {
-    return [info.value.holidayName ? tf(info.value.holidayName) : info.value.isRest ? t('cal.holiday') : t('cal.workLong')]
-  }
-  return festivals.value.slice(0, 6)
-})
-
-function summary(d: (typeof dayDiaries.value)[number]): string {
+function diaryText(d: Diary): string {
   const body = plainExcerpt(d.content, 46)
   if (body) return body
   if (d.attachments.length) return t('info.attachN', { n: d.attachments.length })
@@ -56,24 +45,24 @@ function summary(d: (typeof dayDiaries.value)[number]): string {
   return t('info.noBody')
 }
 
-function writeDiary() {
-  openDiaryEditor({ date: props.selected })
+function reviewRange(days: number): string {
+  return t('review.range', { n: days })
 }
 
 function editDiary(id: string) {
   openDiaryEditor({ id, date: props.selected })
 }
 
-function addEvent() {
-  openEventEditor({ date: props.selected })
+function editReview(id: string) {
+  openReviewEditor({ id, date: props.selected })
+}
+
+function editTodo(id: string) {
+  openTodoEditor({ id })
 }
 
 function editEvent(id: string) {
   openEventEditor({ id, date: props.selected })
-}
-
-function addBirthday() {
-  openBirthdayEditor()
 }
 
 function editBirthday(id: string) {
@@ -82,189 +71,200 @@ function editBirthday(id: string) {
 </script>
 
 <template>
-  <div class="info card">
-    <div class="top">
-      <div class="top-txt">
-        <b>{{ formatFull(selected) }}</b>
-        <small v-if="locale === 'zh'">{{ info.ganzhiYear }}年 {{ info.lunarMonthDay }} · 属{{ info.zodiac }}</small>
-        <small v-else>{{ info.lunarMonthDay }} · {{ t('cal.yearLabel.en', { zodiac: tf(info.zodiac) }) }}</small>
-      </div>
-      <span class="chip primary rel">{{ relText }}</span>
-    </div>
+  <div v-if="hasAny" class="day-detail card">
+    <!-- 1. 日记 -->
+    <section v-if="dayDiaries.length" class="mod">
+      <p class="mod-head">
+        <i class="dot diary"></i><span>{{ t('mod.diary') }}</span><em>{{ dayDiaries.length }}</em>
+      </p>
+      <button v-for="d in dayDiaries" :key="d.id" class="item" @click="editDiary(d.id)">
+        <span class="lead">{{ d.mood || '📝' }}</span>
+        <span class="txt">
+          <b>{{ d.title || t('common.noTitle') }}</b>
+          <small>{{ diaryText(d) }}</small>
+        </span>
+        <span v-if="d.favorite" class="fav">★</span>
+        <span class="arrow">›</span>
+      </button>
+    </section>
 
-    <div class="chips">
-      <span v-if="info.jieQi" class="chip primary">{{ t('cal.termChip', { name: tf(info.jieQi) }) }}</span>
-
-      <span v-for="f in shownFestivals" :key="f" class="chip accent">{{ f }}</span>
-
-      <span v-if="info.isRest" class="chip accent">{{ t('cal.rest') }} · {{ t('cal.restLong') }}</span>
-      <span v-else-if="info.isWork" class="chip warn">{{ t('cal.work') }} · {{ t('cal.workLong') }}</span>
-
-      <span v-if="!hasAnyChip" class="chip">{{ t('cal.normal') }}</span>
-    </div>
-
-    <div class="event-block">
-      <div class="block-head">
-        <p class="label">{{ t('info.events') }}</p>
-        <button class="mini-btn" @click="addEvent">{{ t('info.addMini') }}</button>
-      </div>
-
-      <div v-if="dayEvents.length" class="event-list">
-        <button v-for="e in dayEvents" :key="e.id" class="event-item" @click="editEvent(e.id)">
-          <span class="time" :class="{ allday: e.allDay }">{{ eventTimeText(e) }}</span>
-          <span class="event-txt">
-            <b>{{ e.title }}</b>
-            <small v-if="e.note">{{ e.note }}</small>
-          </span>
-          <span class="arrow">›</span>
+    <!-- 2. 待办 -->
+    <section v-if="dayTodos.length" class="mod">
+      <p class="mod-head">
+        <i class="dot todo"></i><span>{{ t('mod.todo') }}</span><em>{{ dayTodos.length }}</em>
+      </p>
+      <div v-for="x in dayTodos" :key="x.id" class="item" @click="editTodo(x.id)">
+        <button
+          type="button"
+          class="check"
+          :class="{ on: x.done }"
+          :aria-label="t(x.done ? 'aria.markUndone' : 'aria.markDone', { title: x.title })"
+          @click.stop="toggleTodo(x.id)"
+        >
+          <svg v-if="x.done" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5.5 12.5l4 4 9-9.5" />
+          </svg>
         </button>
+        <span class="txt">
+          <b :class="{ done: x.done }">{{ x.title }}</b>
+          <small v-if="x.note">{{ x.note }}</small>
+        </span>
+        <span class="arrow">›</span>
       </div>
-      <p v-else class="hint">{{ t('info.noEvent') }}</p>
-    </div>
+    </section>
 
-    <div class="diary-block">
-      <div class="diary-head">
-        <p class="label">{{ t('info.diaries') }}</p>
-        <button class="write-btn" @click="writeDiary">{{ t('info.writeOne') }}</button>
-      </div>
+    <!-- 3. 复盘 -->
+    <section v-if="dayReviews.length" class="mod">
+      <p class="mod-head">
+        <i class="dot review"></i><span>{{ t('mod.review') }}</span><em>{{ dayReviews.length }}</em>
+      </p>
+      <button v-for="r in dayReviews" :key="r.id" class="item" @click="editReview(r.id)">
+        <span class="lead review-lead">🧭</span>
+        <span class="txt">
+          <b>{{ reviewSummary(r) || t('mod.review') }}</b>
+          <small>{{ reviewRange(r.days) }}</small>
+        </span>
+        <span class="arrow">›</span>
+      </button>
+    </section>
 
-      <div v-if="dayDiaries.length" class="diary-list">
-        <button v-for="d in dayDiaries" :key="d.id" class="diary-item" @click="editDiary(d.id)">
-          <span class="mood">{{ d.mood || '📝' }}</span>
-          <span class="diary-txt">
-            <b>{{ d.title || t('common.noTitle') }}</b>
-            <small>{{ summary(d) }}</small>
-          </span>
-          <span v-if="d.favorite" class="fav">★</span>
-          <span class="arrow">›</span>
-        </button>
-      </div>
-      <p v-else class="hint">{{ t('info.noDiary') }}</p>
-    </div>
+    <!-- 4. 日程 -->
+    <section v-if="dayEvents.length" class="mod">
+      <p class="mod-head">
+        <i class="dot event"></i><span>{{ t('mod.event') }}</span><em>{{ dayEvents.length }}</em>
+      </p>
+      <button v-for="e in dayEvents" :key="e.id" class="item" @click="editEvent(e.id)">
+        <span class="lead time" :class="{ allday: e.allDay || !e.startTime }">{{ e.allDay || !e.startTime ? t('common.allDay') : eventTimeText(e) }}</span>
+        <span class="txt">
+          <b>{{ e.title }}</b>
+          <small v-if="e.note">{{ e.note }}</small>
+        </span>
+        <span class="arrow">›</span>
+      </button>
+    </section>
 
-    <div class="birthday-block">
-      <div class="block-head">
-        <p class="label">{{ t('info.birthdays') }}</p>
-        <button class="pink-btn" @click="addBirthday">{{ t('info.addMini') }}</button>
-      </div>
-
-      <div v-if="dayBirthdays.length" class="event-list">
-        <button v-for="x in dayBirthdays" :key="x.b.id" class="event-item" @click="editBirthday(x.b.id)">
-          <span class="cake">🎂</span>
-          <span class="event-txt">
-            <b>{{ x.b.name }}</b>
-            <small>{{ x.b.type === 'lunar' ? t('info.bdLunar') : t('info.bdSolar') }}<template v-if="x.age != null"> · {{ t('info.turnsAge', { n: x.age }) }}</template></small>
-          </span>
-          <span class="arrow">›</span>
-        </button>
-      </div>
-      <p v-else class="hint">{{ t('info.noBirthday') }}</p>
-    </div>
+    <!-- 5. 生日 -->
+    <section v-if="dayBirthdays.length" class="mod">
+      <p class="mod-head">
+        <i class="dot birthday"></i><span>{{ t('mod.birthday') }}</span><em>{{ dayBirthdays.length }}</em>
+      </p>
+      <button v-for="x in dayBirthdays" :key="x.b.id" class="item" @click="editBirthday(x.b.id)">
+        <span class="lead cake">🎂</span>
+        <span class="txt">
+          <b>{{ x.b.name }}</b>
+          <small>
+            {{ x.b.type === 'lunar' ? t('info.bdLunar') : t('info.bdSolar') }}<template v-if="x.age != null"> · {{ t('info.turnsAge', { n: x.age }) }}</template>
+          </small>
+        </span>
+        <span class="arrow">›</span>
+      </button>
+    </section>
   </div>
 </template>
 
 <style scoped>
-.info {
-  margin-top: 12px;
-  padding: 14px;
+.day-detail {
+  margin-top: 10px;
+  padding: 6px 6px 8px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 4px;
 }
 
-.top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.top-txt b {
-  display: block;
-  font-size: 17px;
-  letter-spacing: 0.01em;
-}
-
-.top-txt small {
-  display: block;
-  margin-top: 3px;
-  font-size: 12.5px;
-  color: var(--qyl-text-2);
-}
-
-.rel {
-  flex: none;
-  margin-top: 2px;
-}
-
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.diary-block {
-  padding-top: 10px;
+.mod + .mod {
+  padding-top: 8px;
   border-top: 1px dashed var(--qyl-line);
 }
 
-.diary-head {
+.mod-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.write-btn {
-  padding: 6px 12px;
-  border-radius: 999px;
-  background: var(--qyl-primary-soft);
-  color: var(--qyl-primary);
-  font-size: 12.5px;
-  font-weight: 600;
-}
-
-.diary-list {
-  display: flex;
-  flex-direction: column;
   gap: 6px;
-  margin-top: 6px;
+  margin: 8px 6px 4px;
+  font-size: 12px;
+  color: var(--qyl-text-3);
 }
 
-.diary-item {
+.mod-head em {
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: block;
+}
+
+.dot.diary {
+  background: var(--qyl-primary);
+}
+
+.dot.review {
+  background: var(--qyl-review);
+}
+
+.dot.todo {
+  background: var(--qyl-warn);
+}
+
+.dot.event {
+  background: var(--qyl-accent);
+}
+
+.dot.birthday {
+  background: var(--qyl-pink);
+}
+
+.item {
   width: 100%;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 9px 10px;
+  padding: 10px 10px;
   border-radius: var(--qyl-radius-sm);
-  background: var(--qyl-surface-2);
   text-align: left;
 }
 
-.diary-item:active {
-  background: var(--qyl-primary-soft);
+.item:active {
+  background: var(--qyl-surface-2);
 }
 
-.mood {
+.lead {
   flex: none;
-  width: 30px;
-  height: 30px;
-  border-radius: 10px;
-  background: var(--qyl-surface);
+  min-width: 30px;
   font-size: 17px;
   line-height: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  text-align: center;
+  color: var(--qyl-accent);
 }
 
-.diary-txt {
+.lead.review-lead {
+  font-size: 16px;
+}
+
+.lead.time {
+  min-width: 52px;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.lead.time.allday {
+  color: var(--qyl-primary);
+}
+
+.lead.cake {
+  font-size: 16px;
+}
+
+.txt {
   flex: 1;
   min-width: 0;
 }
 
-.diary-txt b {
+.txt b {
   display: block;
   font-size: 14px;
   font-weight: 600;
@@ -273,7 +273,12 @@ function editBirthday(id: string) {
   text-overflow: ellipsis;
 }
 
-.diary-txt small {
+.txt b.done {
+  text-decoration: line-through;
+  color: var(--qyl-text-3);
+}
+
+.txt small {
   display: block;
   margin-top: 2px;
   font-size: 12px;
@@ -281,6 +286,23 @@ function editBirthday(id: string) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.check {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1.7px solid var(--qyl-line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+
+.check.on {
+  background: var(--qyl-primary);
+  border-color: var(--qyl-primary);
 }
 
 .fav {
@@ -294,124 +316,5 @@ function editBirthday(id: string) {
   color: var(--qyl-text-3);
   font-size: 18px;
   line-height: 1;
-}
-
-.event-block {
-  padding-top: 10px;
-  border-top: 1px dashed var(--qyl-line);
-}
-
-.block-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.mini-btn {
-  padding: 6px 12px;
-  border-radius: 999px;
-  background: var(--qyl-accent-soft);
-  color: var(--qyl-accent);
-  font-size: 12.5px;
-  font-weight: 600;
-}
-
-.event-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 6px;
-}
-
-.event-item {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 10px;
-  border-radius: var(--qyl-radius-sm);
-  background: var(--qyl-surface-2);
-  text-align: left;
-}
-
-.event-item:active {
-  background: var(--qyl-accent-soft);
-}
-
-.time {
-  flex: none;
-  min-width: 46px;
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--qyl-accent);
-  font-variant-numeric: tabular-nums;
-}
-
-.time.allday {
-  color: var(--qyl-primary);
-}
-
-.event-txt {
-  flex: 1;
-  min-width: 0;
-}
-
-.event-txt b {
-  display: block;
-  font-size: 14px;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.event-txt small {
-  display: block;
-  margin-top: 2px;
-  font-size: 12px;
-  color: var(--qyl-text-3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.birthday-block {
-  padding-top: 10px;
-  border-top: 1px dashed var(--qyl-line);
-}
-
-.pink-btn {
-  padding: 6px 12px;
-  border-radius: 999px;
-  background: var(--qyl-pink-soft);
-  color: var(--qyl-pink);
-  font-size: 12.5px;
-  font-weight: 600;
-}
-
-.cake {
-  flex: none;
-  width: 30px;
-  height: 30px;
-  border-radius: 10px;
-  background: var(--qyl-surface);
-  font-size: 16px;
-  line-height: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.label {
-  margin: 0 0 4px;
-  font-size: 12px;
-  color: var(--qyl-text-3);
-}
-
-.hint {
-  margin: 0;
-  font-size: 13px;
-  color: var(--qyl-text-2);
 }
 </style>

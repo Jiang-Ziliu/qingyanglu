@@ -51,12 +51,12 @@ const longestStreak = computed(() => {
   return best
 })
 
-/** 最近 30 天每天的日记篇数（从旧到新） */
+/** 最近 30 天每天的日记篇数（今天在最前，越往右越早） */
 const bars30 = computed(() => {
   const byDate = new Map<string, number>()
   for (const d of diaryState.list) byDate.set(d.date, (byDate.get(d.date) ?? 0) + 1)
   const out: { key: string; count: number }[] = []
-  for (let i = 29; i >= 0; i--) {
+  for (let i = 0; i < 30; i++) {
     const key = addDays(today, -i)
     out.push({ key, count: byDate.get(key) ?? 0 })
   }
@@ -100,6 +100,12 @@ function fmtNum(n: number): string {
 function barTip(b: { key: string; count: number }): string {
   const date = formatCN(b.key)
   return b.count ? t('stats.barTipN', { date, n: b.count }) : t('stats.barTipNone', { date })
+}
+
+/** 柱子下面的短日期，例如 10/16 */
+function shortDate(key: string): string {
+  const parts = key.split('-')
+  return `${Number(parts[1])}/${Number(parts[2])}`
 }
 </script>
 
@@ -156,24 +162,21 @@ function barTip(b: { key: string; count: number }): string {
     </div>
 
     <div class="card chart-card">
-      <p class="chart-title">{{ t('stats.recent30') }}</p>
-      <div class="bars">
-        <div
-          v-for="b in bars30"
-          :key="b.key"
-          class="bar-slot"
-          :title="barTip(b)"
-        >
-          <div
-            class="bar"
-            :class="{ empty: b.count === 0, hot: b.key === today }"
-            :style="{ height: b.count === 0 ? '3px' : Math.max(14, Math.round((b.count / maxBar) * 46)) + 'px' }"
-          ></div>
+      <p class="chart-title">
+        <span>{{ t('stats.recent30') }}</span>
+        <span class="scroll-hint">{{ t('stats.scrollHint') }}</span>
+      </p>
+      <div class="bars-scroll">
+        <div v-for="b in bars30" :key="b.key" class="bar-col" :title="barTip(b)">
+          <div class="bar-slot">
+            <div
+              class="bar"
+              :class="{ empty: b.count === 0, hot: b.key === today }"
+              :style="{ height: b.count === 0 ? '3px' : Math.max(14, Math.round((b.count / maxBar) * 46)) + 'px' }"
+            ></div>
+          </div>
+          <span class="bar-date" :class="{ hot: b.key === today }">{{ shortDate(b.key) }}</span>
         </div>
-      </div>
-      <div class="bar-labels">
-        <span>{{ t('stats.ago30') }}</span>
-        <span>{{ t('stats.today') }}</span>
       </div>
     </div>
 
@@ -268,24 +271,47 @@ function barTip(b: { key: string; count: number }): string {
 .chart-card {
   margin-top: 10px;
   padding: 14px;
+  min-width: 0;
 }
 
 .chart-title {
   margin: 0 0 12px;
   font-size: 12.5px;
   color: var(--qyl-text-3);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
-.bars {
+.scroll-hint {
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+/* 横向可滑动，从今天开始往左看过去 30 天；不会把屏幕撑破 */
+.bars-scroll {
   display: flex;
   align-items: flex-end;
-  gap: 2px;
-  height: 52px;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.bar-col {
+  flex: 0 0 auto;
+  width: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
 }
 
 .bar-slot {
-  flex: 1;
-  height: 100%;
+  width: 100%;
+  height: 52px;
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -293,7 +319,7 @@ function barTip(b: { key: string; count: number }): string {
 
 .bar {
   width: 100%;
-  max-width: 12px;
+  max-width: 14px;
   border-radius: 3px 3px 1px 1px;
   background: var(--qyl-primary);
   opacity: 0.55;
@@ -308,12 +334,16 @@ function barTip(b: { key: string; count: number }): string {
   opacity: 1;
 }
 
-.bar-labels {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 6px;
-  font-size: 10.5px;
+.bar-date {
+  font-size: 9.5px;
   color: var(--qyl-text-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.bar-date.hot {
+  color: var(--qyl-primary);
+  font-weight: 600;
 }
 
 .mood-row {

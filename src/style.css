@@ -26,6 +26,8 @@ html[data-theme='light'] {
   --qyl-warn-soft: #fbf1df;
   --qyl-pink: #d6409f;
   --qyl-pink-soft: #fbe9f4;
+  --qyl-review: #5b6ee0;
+  --qyl-review-soft: #e8ebfb;
   --qyl-shadow: 0 6px 20px rgba(22, 40, 34, 0.06);
   --qyl-shadow-lift: 0 10px 30px rgba(22, 40, 34, 0.12);
   --qyl-overlay: rgba(16, 26, 23, 0.42);
@@ -47,6 +49,8 @@ html[data-theme='dark'] {
   --qyl-warn-soft: #2e2415;
   --qyl-pink: #f472c0;
   --qyl-pink-soft: #341a2b;
+  --qyl-review: #8c9cf5;
+  --qyl-review-soft: #1e2440;
   --qyl-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
   --qyl-shadow-lift: 0 10px 30px rgba(0, 0, 0, 0.5);
   --qyl-overlay: rgba(0, 0, 0, 0.6);

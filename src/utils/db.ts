@@ -3,6 +3,7 @@
  * - 日记正文与元数据存在 diaries 表
  * - 日程事件存在 events 表
  * - 待办存在 todos 表
+ * - 复盘存在 reviews 表
  * - 附件（图片/音频/视频/文件）以 Blob 存在 attachments 表，日记里只存元数据
  * - 预留 deletedAt 字段，供第 6 步「回收站」使用
  */
@@ -87,13 +88,28 @@ export interface Birthday {
   deletedAt: number | null
 }
 
+/** 一条复盘（可以覆盖若干天，如 7 天 / 30 天） */
+export interface Review {
+  id: string
+  /** YYYY-MM-DD，复盘写在（归属）的那一天 */
+  date: string
+  /** 本次复盘覆盖的天数，例如 7 表示「每周复盘」 */
+  days: number
+  /** Markdown 正文 */
+  content: string
+  createdAt: number
+  updatedAt: number
+  deletedAt: number | null
+}
+
 const DB_NAME = 'qingyanglu'
-const DB_VERSION = 3
+const DB_VERSION = 4
 const STORE_DIARIES = 'diaries'
 const STORE_ATTACHMENTS = 'attachments'
 const STORE_EVENTS = 'events'
 const STORE_TODOS = 'todos'
 const STORE_BIRTHDAYS = 'birthdays'
+const STORE_REVIEWS = 'reviews'
 
 let dbPromise: Promise<IDBDatabase> | null = null
 
@@ -124,6 +140,11 @@ function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(STORE_BIRTHDAYS)) {
         const store = db.createObjectStore(STORE_BIRTHDAYS, { keyPath: 'id' })
+        store.createIndex('updatedAt', 'updatedAt', { unique: false })
+      }
+      if (!db.objectStoreNames.contains(STORE_REVIEWS)) {
+        const store = db.createObjectStore(STORE_REVIEWS, { keyPath: 'id' })
+        store.createIndex('date', 'date', { unique: false })
         store.createIndex('updatedAt', 'updatedAt', { unique: false })
       }
     }
@@ -239,15 +260,30 @@ export async function deleteBirthday(id: string): Promise<void> {
   await tx(STORE_BIRTHDAYS, 'readwrite', (s) => s.delete(id))
 }
 
+/* ------------------------------ 复盘 ------------------------------ */
+
+export async function getAllReviews(): Promise<Review[]> {
+  const all = await tx<Review[]>(STORE_REVIEWS, 'readonly', (s) => s.getAll())
+  return all ?? []
+}
+
+export async function putReview(review: Review): Promise<void> {
+  await tx(STORE_REVIEWS, 'readwrite', (s) => s.put(review))
+}
+
+export async function deleteReview(id: string): Promise<void> {
+  await tx(STORE_REVIEWS, 'readwrite', (s) => s.delete(id))
+}
+
 /* ------------------------------ 回收站 / 备份 ------------------------------ */
 
 export interface TrashItem {
-  kind: 'diary' | 'event' | 'todo' | 'birthday'
+  kind: 'diary' | 'event' | 'todo' | 'birthday' | 'review'
   id: string
   title: string
   subtitle: string
   deletedAt: number
-  raw: Diary | CalendarEvent | Todo | Birthday
+  raw: Diary | CalendarEvent | Todo | Birthday | Review
 }
 
 function fmtDate(ts: number): string {
@@ -257,11 +293,12 @@ function fmtDate(ts: number): string {
 
 /** 收集所有进了回收站（deletedAt 不为空）的项目 */
 export async function collectTrash(): Promise<TrashItem[]> {
-  const [diaries, events, todos, birthdays] = await Promise.all([
+  const [diaries, events, todos, birthdays, reviews] = await Promise.all([
     getAllDiaries(),
     getAllEvents(),
     getAllTodos(),
     getAllBirthdays(),
+    getAllReviews(),
   ])
   const out: TrashItem[] = []
   for (const d of diaries) {
@@ -287,7 +324,25 @@ export async function collectTrash(): Promise<TrashItem[]> {
     if (!b.deletedAt) continue
     out.push({ kind: 'birthday', id: b.id, title: b.name, subtitle: `${b.type === 'lunar' ? '农历' : '公历'}生日`, deletedAt: b.deletedAt, raw: b })
   }
+  for (const r of reviews) {
+    if (!r.deletedAt) continue
+    out.push({
+      kind: 'review',
+      id: r.id,
+      title: reviewTitle(r),
+      subtitle: `${fmtDate(r.date)} · 近 ${r.days} 天`,
+      deletedAt: r.deletedAt,
+      raw: r,
+    })
+  }
   return out.sort((a, b) => b.deletedAt - a.deletedAt)
+}
+
+/** 复盘在列表/回收站里的显示名（取正文首行，没有就兜底） */
+export function reviewTitle(review: Review): string {
+  const first = review.content.split('\n').map((s) => s.trim()).find((s) => s.length > 0)
+  if (!first) return '复盘'
+  return first.replace(/^#+\s*/, '').slice(0, 30)
 }
 
 /** 清掉回收站里超过 days 天的项目，返回清除条数 */
@@ -300,18 +355,19 @@ export async function purgeExpiredTrash(days = 30): Promise<number> {
     if (item.kind === 'diary') await deleteDiaryCompletely(item.raw as Diary)
     else if (item.kind === 'event') await deleteEvent(item.id)
     else if (item.kind === 'todo') await deleteTodo(item.id)
+    else if (item.kind === 'review') await deleteReview(item.id)
     else await deleteBirthday(item.id)
     n++
   }
   return n
 }
 
-/** 清空全部数据（日记、日程、待办、生日、附件），不可恢复 */
+/** 清空全部数据（日记、日程、待办、生日、复盘、附件），不可恢复 */
 export async function wipeAllData(): Promise<void> {
   await openDB().then(
     (db) =>
       new Promise<void>((resolve, reject) => {
-        const names = [STORE_DIARIES, STORE_ATTACHMENTS, STORE_EVENTS, STORE_TODOS, STORE_BIRTHDAYS]
+        const names = [STORE_DIARIES, STORE_ATTACHMENTS, STORE_EVENTS, STORE_TODOS, STORE_BIRTHDAYS, STORE_REVIEWS]
         const transaction = db.transaction(names, 'readwrite')
         for (const name of names) transaction.objectStore(name).clear()
         transaction.oncomplete = () => resolve()
